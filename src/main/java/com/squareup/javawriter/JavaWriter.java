@@ -324,6 +324,7 @@ public class JavaWriter implements Closeable {
     return emitField(type, name, modifiers, null);
   }
 
+  /** Emits a field declaration. */
   public JavaWriter emitField(String type, String name, Set<Modifier> modifiers,
       String initialValue) throws IOException {
     indent();
@@ -334,7 +335,14 @@ public class JavaWriter implements Closeable {
 
     if (initialValue != null) {
       out.write(" = ");
-      out.write(initialValue);
+
+      String[] lines = initialValue.split("\n", -1);
+      out.write(lines[0]);
+      for (int i = 1; i < lines.length; i++) {
+        out.write("\n");
+        hangingIndent();
+        out.write(lines[i]);
+      }
     }
     out.write(";\n");
     return this;
