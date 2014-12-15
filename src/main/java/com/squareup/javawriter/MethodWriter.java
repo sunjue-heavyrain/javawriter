@@ -15,39 +15,47 @@
  */
 package com.squareup.javawriter;
 
-import com.google.common.base.Function;
-import com.google.common.base.Optional;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import java.io.IOException;
-import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-public final class MethodWriter extends Modifiable implements HasClassReferences, Writable {
+public final class MethodWriter extends Modifiable implements Writable {
+  private final List<TypeVariableName> typeVariables;
   private final TypeName returnType;
   private final String name;
   private final Map<String, VariableWriter> parameterWriters;
-  private Optional<BlockWriter> body;
+  private final List<ClassName> throwsTypes;
+  private BlockWriter body;
 
   MethodWriter(TypeName returnType, String name) {
+    this.typeVariables = Lists.newArrayList();
     this.returnType = returnType;
     this.name = name;
     this.parameterWriters = Maps.newLinkedHashMap();
-    this.body = Optional.absent();
+    this.throwsTypes = Lists.newArrayList();
+    this.body = new BlockWriter();
   }
 
   public String name() {
     return name;
   }
 
+  public void addTypeVariable(TypeVariableName typeVariable) {
+    this.typeVariables.add(typeVariable);
+  }
+
   public VariableWriter addParameter(Class<?> type, String name) {
-    return addParameter(ClassName.fromClass(type), name);
+    return addParameter(TypeNames.forClass(type), name);
   }
 
   public VariableWriter addParameter(TypeElement type, String name) {
@@ -65,51 +73,48 @@ public final class MethodWriter extends Modifiable implements HasClassReferences
     return parameterWriter;
   }
 
+  public void addThrowsType(Class<?> clazz) {
+    addThrowsType(ClassName.fromClass(clazz));
+  }
+
+  public void addThrowsType(ClassName throwsType) {
+    throwsTypes.add(throwsType);
+  }
+
   public BlockWriter body() {
-    if (body.isPresent()) {
-      return body.get();
-    } else {
-      BlockWriter blockWriter = new BlockWriter();
-      body = Optional.of(blockWriter);
-      return blockWriter;
-    }
+    return body;
   }
 
   @Override
   public Appendable write(Appendable appendable, Context context) throws IOException {
     writeAnnotations(appendable, context);
     writeModifiers(appendable);
+    Writables.Joiner.on(", ").wrap("<", "> ").appendTo(appendable, context, typeVariables);
     returnType.write(appendable, context);
     appendable.append(' ').append(name).append('(');
-    Iterator<VariableWriter> parameterWritersIterator = parameterWriters.values().iterator();
-    if (parameterWritersIterator.hasNext()) {
-      parameterWritersIterator.next().write(appendable, context);
-    }
-    while (parameterWritersIterator.hasNext()) {
-      appendable.append(", ");
-      parameterWritersIterator.next().write(appendable, context);
-    }
+    Writables.Joiner.on(", ").appendTo(appendable, context, parameterWriters.values());
     appendable.append(")");
-    if (body.isPresent()) {
-      appendable.append(" {");
-      body.get().write(new IndentingAppendable(appendable), context);
-      appendable.append("}\n");
-    } else {
+    Writables.Joiner.on(", ").prefix(" throws ").appendTo(appendable, context, throwsTypes);
+    if (modifiers.contains(Modifier.ABSTRACT)) {
       appendable.append(";\n");
+    } else {
+      appendable.append(" {\n");
+      if (!body.isEmpty()) {
+        body.write(new IndentingAppendable(appendable), context).append('\n');
+      }
+      appendable.append("}\n");
     }
     return appendable;
   }
 
   @Override
   public Set<ClassName> referencedClasses() {
-    return FluentIterable.from(
-        Iterables.concat(ImmutableList.of(returnType), parameterWriters.values(), body.asSet()))
-            .transformAndConcat(new Function<HasClassReferences, Set<ClassName>>() {
-              @Override
-              public Set<ClassName> apply(HasClassReferences input) {
-                return input.referencedClasses();
-              }
-            })
-            .toSet();
+    @SuppressWarnings("unchecked")
+    Iterable<? extends HasClassReferences> concat =
+        Iterables.concat(super.referencedClasses(), typeVariables,
+            ImmutableList.of(returnType, body), parameterWriters.values(), throwsTypes);
+    return FluentIterable.from(concat)
+        .transformAndConcat(GET_REFERENCED_CLASSES)
+        .toSet();
   }
 }

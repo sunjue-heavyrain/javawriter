@@ -22,9 +22,9 @@ import com.google.common.base.Optional;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -138,7 +138,7 @@ public final class ClassName implements TypeName, Comparable<ClassName> {
     checkNotNull(element);
     checkArgument(ACCEPTABLE_NESTING_KINDS.contains(element.getNestingKind()));
     String simpleName = element.getSimpleName().toString();
-    List<String> enclosingNames = new ArrayList<String>();
+    List<String> enclosingNames = Lists.newArrayList();
     Element current = element.getEnclosingElement();
     while (current.getKind().isClass() || current.getKind().isInterface()) {
       checkArgument(ACCEPTABLE_NESTING_KINDS.contains(element.getNestingKind()));
@@ -153,7 +153,13 @@ public final class ClassName implements TypeName, Comparable<ClassName> {
 
   public static ClassName fromClass(Class<?> clazz) {
     checkNotNull(clazz);
-    List<String> enclosingNames = new ArrayList<String>();
+    checkArgument(!clazz.isPrimitive(),
+        "Primitive types cannot be represented as a ClassName. Use TypeNames.forClass instead.");
+    checkArgument(!void.class.equals(clazz),
+        "'void' type cannot be represented as a ClassName. Use TypeNames.forClass instead.");
+    checkArgument(!clazz.isArray(),
+        "Array types cannot be represented as a ClassName. Use TypeNames.forClass instead.");
+    List<String> enclosingNames = Lists.newArrayList();
     Class<?> current = clazz.getEnclosingClass();
     while (current != null) {
       enclosingNames.add(current.getSimpleName());

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Google, Inc.
+ * Copyright (C) 2014 Square, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,22 @@
  */
 package com.squareup.javawriter;
 
-import com.google.common.base.Function;
-import java.util.Set;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
-public interface HasClassReferences {
-  Function<HasClassReferences, Set<ClassName>> GET_REFERENCED_CLASSES =
-      new Function<HasClassReferences, Set<ClassName>>() {
-        @Override
-        public Set<ClassName> apply(HasClassReferences input) {
-          return input.referencedClasses();
-        }
-      };
+import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
-  Set<ClassName> referencedClasses();
+@RunWith(JUnit4.class)
+public final class ClassWriterTest {
+  @Test public void onlyTopLevelClassNames() {
+    ClassName name = ClassName.bestGuessFromString("test.Foo.Bar");
+    try {
+      ClassWriter.forClassName(name);
+      fail();
+    } catch (IllegalArgumentException e) {
+      assertThat(e.getMessage()).isEqualTo("test.Foo.Bar must be top-level type.");
+    }
+  }
 }

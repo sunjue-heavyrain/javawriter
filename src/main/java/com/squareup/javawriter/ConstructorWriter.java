@@ -15,32 +15,38 @@
  */
 package com.squareup.javawriter;
 
-import com.google.common.base.Function;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import java.io.IOException;
-import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.lang.model.element.TypeElement;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-public final class ConstructorWriter extends Modifiable implements Writable, HasClassReferences {
+public final class ConstructorWriter extends Modifiable implements Writable {
+  private final List<TypeVariableName> typeVariables;
   private final String name;
   private final Map<String, VariableWriter> parameterWriters;
-  private final BlockWriter blockWriter;
+  private final BlockWriter body;
 
   ConstructorWriter(String name) {
+    this.typeVariables = Lists.newArrayList();
     this.name = name;
     this.parameterWriters = Maps.newLinkedHashMap();
-    this.blockWriter = new BlockWriter();
+    this.body = new BlockWriter();
+  }
+
+  public void addTypeVariable(TypeVariableName typeVariable) {
+    this.typeVariables.add(typeVariable);
   }
 
   public VariableWriter addParameter(Class<?> type, String name) {
-    return addParameter(ClassName.fromClass(type), name);
+    return addParameter(TypeNames.forClass(type), name);
   }
 
   public VariableWriter addParameter(TypeElement type, String name) {
@@ -58,7 +64,7 @@ public final class ConstructorWriter extends Modifiable implements Writable, Has
   }
 
   public BlockWriter body() {
-    return blockWriter;
+    return body;
   }
 
   private VariableWriter addParameter(ClassName type, String name) {
@@ -70,30 +76,24 @@ public final class ConstructorWriter extends Modifiable implements Writable, Has
 
   @Override
   public Set<ClassName> referencedClasses() {
-    return FluentIterable.from(
-        Iterables.concat(parameterWriters.values(), ImmutableList.of(blockWriter)))
-            .transformAndConcat(new Function<HasClassReferences, Set<ClassName>>() {
-              @Override
-              public Set<ClassName> apply(HasClassReferences input) {
-                return input.referencedClasses();
-              }
-            })
+    Iterable<? extends HasClassReferences> concat =
+        Iterables.concat(super.referencedClasses(), typeVariables, parameterWriters.values(),
+            ImmutableList.of(body));
+    return FluentIterable.from(concat)
+            .transformAndConcat(GET_REFERENCED_CLASSES)
             .toSet();
   }
 
   @Override
   public Appendable write(Appendable appendable, Context context) throws IOException {
-    writeModifiers(appendable).append(name).append('(');
-    Iterator<VariableWriter> parameterWritersIterator = parameterWriters.values().iterator();
-    if (parameterWritersIterator.hasNext()) {
-      parameterWritersIterator.next().write(appendable, context);
+    writeModifiers(appendable);
+    Writables.Joiner.on(", ").wrap("<", "> ").appendTo(appendable, context, typeVariables);
+    appendable.append(name).append('(');
+    Writables.Joiner.on(", ").appendTo(appendable, context, parameterWriters.values());
+    appendable.append(") {\n");
+    if (!body.isEmpty()) {
+      body.write(new IndentingAppendable(appendable), context).append('\n');
     }
-    while (parameterWritersIterator.hasNext()) {
-      appendable.append(", ");
-      parameterWritersIterator.next().write(appendable, context);
-    }
-    appendable.append(") {");
-    blockWriter.write(new IndentingAppendable(appendable), context);
     return appendable.append("}\n");
   }
 }

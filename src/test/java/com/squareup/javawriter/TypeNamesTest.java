@@ -16,9 +16,12 @@
 package com.squareup.javawriter;
 
 import com.google.testing.compile.CompilationRule;
+import java.io.Serializable;
 import java.nio.charset.Charset;
+import java.util.List;
 import java.util.Set;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
@@ -59,6 +62,38 @@ public class TypeNamesTest {
         .isEqualTo(ParameterizedTypeName.create(Set.class, ClassName.fromClass(Object.class)));
   }
 
+  static class Parameterized<
+      Simple,
+      ExtendsClass extends Number,
+      ExtendsInterface extends Runnable,
+      ExtendsTypeVariable extends Simple,
+      Intersection extends Number & Runnable,
+      IntersectionOfInterfaces extends Runnable & Serializable> {}
+
+  @Test
+  public void forTypeMirror_typeVariable() {
+    List<? extends TypeParameterElement> typeVariables =
+        getElement(Parameterized.class).getTypeParameters();
+
+    assert_().that(TypeNames.forTypeMirror(typeVariables.get(0).asType()))
+        .isEqualTo(TypeVariableName.create("Simple"));
+    assert_().that(TypeNames.forTypeMirror(typeVariables.get(1).asType()))
+        .isEqualTo(TypeVariableName.create("ExtendsClass", ClassName.fromClass(Number.class)));
+    assert_().that(TypeNames.forTypeMirror(typeVariables.get(2).asType()))
+        .isEqualTo(TypeVariableName.create("ExtendsInterface", ClassName.fromClass(Runnable.class)));
+    assert_().that(TypeNames.forTypeMirror(typeVariables.get(3).asType()))
+        .isEqualTo(TypeVariableName.create("ExtendsTypeVariable",
+            TypeVariableName.create("Simple")));
+    assert_().that(TypeNames.forTypeMirror(typeVariables.get(4).asType()))
+        .isEqualTo(TypeVariableName.create("Intersection", IntersectionTypeName.create(
+            ClassName.fromClass(Number.class),
+            ClassName.fromClass(Runnable.class))));
+    assert_().that(TypeNames.forTypeMirror(typeVariables.get(5).asType()))
+        .isEqualTo(TypeVariableName.create("IntersectionOfInterfaces", IntersectionTypeName.create(
+            ClassName.fromClass(Runnable.class),
+            ClassName.fromClass(Serializable.class))));
+  }
+
   @Test
   public void forTypeMirror_primitive() {
     assert_().that(TypeNames.forTypeMirror(compilation.getTypes().getPrimitiveType(TypeKind.BOOLEAN)))
@@ -85,10 +120,22 @@ public class TypeNamesTest {
         .isEqualTo(new ArrayTypeName(ClassName.fromClass(Object.class)));
   }
 
+  @Test public void forClass_array() {
+    assert_().that(TypeNames.forClass(Object[].class))
+        .isEqualTo(new ArrayTypeName(ClassName.fromClass(Object.class)));
+    assert_().that(TypeNames.forClass(int[].class))
+        .isEqualTo(new ArrayTypeName(PrimitiveName.INT));
+  }
+
   @Test
   public void forTypeMirror_void() {
     assert_().that(TypeNames.forTypeMirror(compilation.getTypes().getNoType(TypeKind.VOID)))
         .isEqualTo(VoidName.VOID);
+  }
+
+  @Test public void forClass_void() {
+    assert_().that(TypeNames.forClass(void.class)).isEqualTo(VoidName.VOID);
+    assert_().that(TypeNames.forClass(Void.class)).isNotEqualTo(VoidName.VOID);
   }
 
   @Test

@@ -17,6 +17,9 @@ package com.squareup.javawriter;
 
 import com.google.common.base.Function;
 import com.google.common.collect.FluentIterable;
+import com.google.common.collect.Lists;
+import java.lang.reflect.Method;
+import java.util.List;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
@@ -24,6 +27,7 @@ import javax.lang.model.type.NoType;
 import javax.lang.model.type.NullType;
 import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.TypeVariable;
 import javax.lang.model.type.WildcardType;
 import javax.lang.model.util.SimpleTypeVisitor6;
 
@@ -36,10 +40,10 @@ public final class TypeNames {
       };
 
   public static TypeName forClass(Class<?> clazz) {
-    if (clazz.isPrimitive()) {
-      return PrimitiveName.forClass(clazz);
-    } else if (void.class.equals(clazz)) {
+    if (void.class.equals(clazz)) {
       return VoidName.VOID;
+    } else if (clazz.isPrimitive()) {
+      return PrimitiveName.forClass(clazz);
     } else if (clazz.isArray()) {
       return new ArrayTypeName(forClass(clazz.getComponentType()));
     } else {
@@ -52,6 +56,25 @@ public final class TypeNames {
       @Override
       protected TypeName defaultAction(TypeMirror e, Void p) {
         throw new IllegalArgumentException(e.toString());
+      }
+
+      @Override
+      public TypeName visitUnknown(TypeMirror t, Void p) {
+        if ("INTERSECTION".equals(t.getKind().name())) {
+          return visitIntersectionType(t);
+        }
+        return super.visitUnknown(t, p);
+      }
+
+      @SuppressWarnings("unchecked") // Gross things in support of Java 8.
+      private TypeName visitIntersectionType(TypeMirror t) {
+        try {
+          Method method = t.getClass().getMethod("getBounds");
+          List<? extends TypeMirror> bounds = (List<? extends TypeMirror>) method.invoke(t);
+          return new IntersectionTypeName(Lists.transform(bounds, FOR_TYPE_MIRROR));
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
       }
 
       @Override
@@ -71,6 +94,11 @@ public final class TypeNames {
       @Override
       public PrimitiveName visitPrimitive(PrimitiveType t, Void p) {
         return PrimitiveName.forTypeMirror(t);
+      }
+
+      @Override
+      public TypeName visitTypeVariable(TypeVariable t, Void p) {
+        return TypeVariableName.forTypeMirror(t);
       }
 
       @Override

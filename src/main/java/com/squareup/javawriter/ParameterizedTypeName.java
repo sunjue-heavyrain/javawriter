@@ -16,10 +16,9 @@
 package com.squareup.javawriter;
 
 import com.google.common.base.Objects;
+import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -36,26 +35,17 @@ public final class ParameterizedTypeName implements TypeName {
 
   @Override
   public Set<ClassName> referencedClasses() {
-    ImmutableSet.Builder<ClassName> builder = new ImmutableSet.Builder<ClassName>()
-        .add(type);
-    for (TypeName parameter : parameters) {
-      builder.addAll(parameter.referencedClasses());
-    }
-    return builder.build();
+    return FluentIterable.from(parameters)
+        .transformAndConcat(GET_REFERENCED_CLASSES)
+        .append(type)
+        .toSet();
   }
 
   @Override
   public Appendable write(Appendable appendable, Context context) throws IOException {
     appendable.append(context.sourceReferenceForClassName(type));
-    Iterator<? extends TypeName> parameterIterator = parameters.iterator();
-    verify(parameterIterator.hasNext(), type.toString());
-    appendable.append('<');
-    parameterIterator.next().write(appendable, context);
-    while (parameterIterator.hasNext()) {
-      appendable.append(", ");
-      parameterIterator.next().write(appendable, context);
-    }
-    appendable.append('>');
+    verify(!parameters.isEmpty(), type.toString());
+    Writables.Joiner.on(", ").wrap("<", ">").appendTo(appendable, context, parameters);
     return appendable;
   }
 

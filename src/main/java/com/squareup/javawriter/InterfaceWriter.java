@@ -15,18 +15,23 @@
  */
 package com.squareup.javawriter;
 
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 public final class InterfaceWriter extends TypeWriter {
+  public static InterfaceWriter forClassName(ClassName name) {
+    checkArgument(name.enclosingSimpleNames().isEmpty(), "%s must be top-level type.", name);
+    return new InterfaceWriter(name);
+  }
+
   private final List<TypeVariableName> typeVariables;
+
   InterfaceWriter(ClassName name) {
     super(name);
     this.typeVariables = Lists.newArrayList();
@@ -38,33 +43,11 @@ public final class InterfaceWriter extends TypeWriter {
 
   @Override
   public Appendable write(Appendable appendable, Context context) throws IOException {
-    context = context.createSubcontext(FluentIterable.from(nestedTypeWriters)
-        .transform(new Function<TypeWriter, ClassName>() {
-          @Override public ClassName apply(TypeWriter input) {
-            return input.name;
-          }
-        })
-        .toSet());
+    context = createSubcontext(context);
     writeAnnotations(appendable, context);
     writeModifiers(appendable).append("interface ").append(name.simpleName());
-    if (!typeVariables.isEmpty()) {
-      appendable.append('<');
-      Joiner.on(", ").appendTo(appendable, typeVariables);
-      appendable.append('>');
-    }
-    if (supertype.isPresent()) {
-      appendable.append(" extends ");
-      supertype.get().write(appendable, context);
-    }
-    Iterator<TypeName> implementedTypesIterator = implementedTypes.iterator();
-    if (implementedTypesIterator.hasNext()) {
-      appendable.append(" implements ");
-      implementedTypesIterator.next().write(appendable, context);
-      while (implementedTypesIterator.hasNext()) {
-        appendable.append(", ");
-        implementedTypesIterator.next().write(appendable, context);
-      }
-    }
+    Writables.Joiner.on(", ").wrap("<", "> ").appendTo(appendable, context, typeVariables);
+    Writables.Joiner.on(", ").prefix(" extends ").appendTo(appendable, context, implementedTypes);
     appendable.append(" {");
     for (MethodWriter methodWriter : methodWriters) {
       appendable.append('\n');
@@ -80,17 +63,10 @@ public final class InterfaceWriter extends TypeWriter {
 
   @Override
   public Set<ClassName> referencedClasses() {
-    @SuppressWarnings("unchecked")
     Iterable<? extends HasClassReferences> concat =
-        Iterables.concat(nestedTypeWriters, methodWriters, implementedTypes, supertype.asSet(),
-            annotations);
+        Iterables.concat(super.referencedClasses(), typeVariables);
     return FluentIterable.from(concat)
-        .transformAndConcat(new Function<HasClassReferences, Set<ClassName>>() {
-          @Override
-          public Set<ClassName> apply(HasClassReferences input) {
-            return input.referencedClasses();
-          }
-        })
+        .transformAndConcat(GET_REFERENCED_CLASSES)
         .toSet();
   }
 }
